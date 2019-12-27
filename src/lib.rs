@@ -1,3 +1,6 @@
+#![feature(test)]
+
+
 use std::ptr::copy;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -13,9 +16,8 @@ impl Default for NodeIndex {
 }
 
 // TODO: pad node structs to 4kB by atomatically choosing node degrees
-const NODE_DEG: usize = 8;
+const NODE_DEG: usize = 32;
 
-#[derive(Debug)]
 struct InternalNode<K> {
     keys: [K; NODE_DEG - 1],
     sons: [NodeIndex; NODE_DEG],
@@ -115,7 +117,6 @@ fn test_internal_node() {
     assert_eq!(i.sons[0..i.cnt], [NodeIndex::Leaf(0), NodeIndex::Leaf(1), NodeIndex::Leaf(2), NodeIndex::Leaf(5), NodeIndex::Leaf(3), NodeIndex::Leaf(4)])
 }
 
-#[derive(Debug)]
 struct LeafNode<K, V> {
     keys: [K; NODE_DEG],
     values: [V; NODE_DEG],
@@ -278,7 +279,6 @@ fn test_lower_bound() {
     assert_eq!(lower_bound(&[], &42), 0);
 }
 
-#[derive(Debug)]
 pub struct BTree<K, V> {
     i: Vec<InternalNode<K>>, // internal nodes buf
     l: Vec<LeafNode<K, V>>,  // leaf nodes buf
@@ -408,9 +408,11 @@ fn test_btree_smoke() {
 #[cfg(test)]
 mod tests {
     extern crate rand;
+    extern crate test;
     use super::*;
     use std::collections::BTreeMap;
     use rand::prelude::*;
+    use test::Bencher;
 
     #[test]
     fn test_bree_1() {
@@ -438,5 +440,29 @@ mod tests {
                 assert_eq!(t.insert(&k, &v), truth.insert(k, v));
             }
         }
+    }
+
+    #[bench]
+    fn bench_insert_dense_keys(b: &mut Bencher) {
+        let n = 100000;
+        b.iter(||{
+            let mut t = BTree::<usize, usize>::new();
+            for i in 0..n {
+                t.insert(&i, &i);
+            }
+        });
+        b.bytes = n as u64;
+    }
+
+    #[bench]
+    fn bench_std_insert_dense_keys(b: &mut Bencher) {
+        let n = 100000;
+        b.iter(||{
+            let mut t = BTreeMap::<usize, usize>::new();
+            for i in 0..n {
+                t.insert(i, i);
+            }
+        });
+        b.bytes = n as u64;
     }
 }
