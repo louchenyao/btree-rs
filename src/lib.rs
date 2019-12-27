@@ -113,19 +113,57 @@ impl<K: PartialOrd + Copy + Default, V: Copy + Default> LeafNode<K, V> {
             None
         }
     }
+
+
+    /// Splits the node to two nodes. The current node turns into the left node.
+    /// Returns the mininum the right node.
+    fn split(&mut self) -> Self {
+        let left_cnt = self.cnt / 2;
+        let mut right = Self::new();
+        
+        // updates data
+        unsafe {
+            copy(&self.keys[left_cnt], &mut right.keys[0], self.cnt - left_cnt);
+            copy(&self.values[left_cnt], &mut right.values[0], self.cnt - left_cnt);
+        };
+
+        // updates the cnt
+        right.cnt = self.cnt - left_cnt;
+        self.cnt = left_cnt;
+
+        right
+    }
 }
 
 #[test]
 fn test_leaf_node() {
+    // test insert and lookup
     let mut l = LeafNode::<&str, usize>::new();
     l.insert(&"hi", &3);
     l.insert(&"hello", &4);
     l.insert(&"world", &5);
     l.insert(&"abc", &6);
+    l.insert(&"def", &7);
     assert_eq!(l.lookup(&"hi"), Some(&3));
     assert_eq!(l.lookup(&"hello"), Some(&4));
     assert_eq!(l.lookup(&"world"), Some(&5));
     assert_eq!(l.lookup(&"abc"), Some(&6));
+    assert_eq!(l.lookup(&"def"), Some(&7));
+
+    // test split
+    let right = l.split();
+    assert_eq!(l.cnt, 2);
+    assert_eq!(l.lookup(&"abc"), Some(&6));
+    assert_eq!(l.lookup(&"def"), Some(&7));
+    assert_eq!(l.lookup(&"hello"), None);
+    assert_eq!(l.lookup(&"hi"), None);
+    assert_eq!(l.lookup(&"world"), None);
+    assert_eq!(right.cnt, 3);
+    assert_eq!(right.lookup(&"abc"), None);
+    assert_eq!(right.lookup(&"def"), None);
+    assert_eq!(right.lookup(&"hello"), Some(&4));
+    assert_eq!(right.lookup(&"hi"), Some(&3));
+    assert_eq!(right.lookup(&"world"), Some(&5));
 }
 
 /// Returns the index pointing to the first element in the range [0,a.len()) which does not compare less than val.
@@ -188,32 +226,63 @@ impl<K: PartialOrd + PartialEq + Default + Copy, V: Default + Copy> BTree<K, V> 
         t
     }
 
+    /// Allocates a leaf node, and initializes it to `leaf`
+    /// Then returns the index of the new leaf node.
+    fn alloc_leaf(&mut self, leaf: LeafNode<K, V>) -> usize {
+        self.l.push(leaf);
+        self.l.len() - 1
+    }
+
+    /// Allocates an internal node, and initializes it to `internal`
+    /// Returns the indexe of the new internal node.
+    fn alloc_internal(&mut self, internal: InternalNode<K>) -> usize {
+        self.i.push(internal);
+        self.i.len() - 1
+    }
+
     fn insert(&mut self, k: &K, v: &V) -> Option<V> {
         let mut cur = self.root;
-        let mut father: Option<usize> = None; // the node id of the father node of the current node
+        let mut father_id: Option<usize> = None; // the node id of the father node of the current node
         let mut father_son_index: usize = 0; // the current node `father_son_index`-th son of the father node
         loop {
             match cur {
                 NodeIndex::Internal(id) => {
-                    let t = &mut self.i[id];
-                    if t.full() {
-                        let right_min, right_node = t.split();
-                        // TODO:
-                        let fa = &mut self.i[father];
-                        fa.insert(father_son_index, xx, xx);
+                    // let t = &mut self.i[id];
+                    // if t.full() {
+                    //     let right_min, right_node = t.split();
+                    //     // TODO:
+                    //     let fa = &mut self.i[father];
+                    //     fa.insert(father_son_index, xx, xx);
                         
-                        if right_min <= k {
-                            cur = NodeIndex::Internal(right_id);
-                        }
-                    } else {
-                        father = Some(id);
-                        let (father_son_index, cur) = t.lookup(k);
-                    }
+                    //     if right_min <= k {
+                    //         cur = NodeIndex::Internal(right_id);
+                    //     }
+                    // } else {
+                    //     father = Some(id);
+                    //     let (father_son_index, cur) = t.lookup(k);
+                    // }
                 }
                 NodeIndex::Leaf(id) => {
                     let t = &mut self.l[id];
                     if t.full() {
-                        // TODO: split the current leaf node
+                        let right = t.split();
+                        let right_id = self.alloc_leaf(right);
+
+                        // make a new root node since the current node is already the root node
+                        if father_id == None {
+                            let new_root_id = self.alloc_internal(
+                                InternalNode::new(NodeIndex::Leaf(id))
+                            );
+                            self.root = NodeIndex::Internal(new_root_id);
+                            father_id = Some(new_root_id);
+                        }
+
+
+                        // insert the right to the father node
+                        
+                        let fa = &mut self.i[father_id.unwrap()];
+
+
                     } else {
                         return t.insert(k, v);
                     }
@@ -227,7 +296,7 @@ impl<K: PartialOrd + PartialEq + Default + Copy, V: Default + Copy> BTree<K, V> 
         loop {
             match cur {
                 NodeIndex::Internal(id) => {
-                    cur = self.i[id].lookup(k);
+                    cur = self.i[id].lookup(k).1;
                 }
                 NodeIndex::Leaf(id) => {
                     return self.l[id].lookup(k);
