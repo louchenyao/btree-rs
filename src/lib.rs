@@ -50,7 +50,6 @@ impl<K: PartialOrd + Copy + Default> InternalNode<K> {
         // Thus, `k` in the sub-tree `sons[lower_bound(keys, k)]`
 
         let i = lower_bound(&self.keys[0..self.cnt-1], k);
-        println!("{:?}", i);
         (i, self.sons[i])
     }
 
@@ -383,7 +382,6 @@ impl<K: PartialOrd + PartialEq + Default + Copy, V: Default + Copy> BTree<K, V> 
     pub fn lookup(&self, k: &K) -> Option<&V> {
         let mut cur = self.root;
         loop {
-            println!("cur = {:?}", cur);
             match cur {
                 NodeIndex::Internal(id) => {
                     cur = self.i[id].lookup(k).1;
